@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+<html lang="en">
+<script src="http://d3js.org/d3.v3.min.js"></script>
+
+<body>
+<h1>API Server Status 7 day history</h1>
+<h3>Displayed in 15 minute increments</h3>
+
+</body>
+
+<style type="text/css">
+
+body {
+   font-family: sans-serif;
+   font-size: 1em;
+   font-weight: bold;
+   color: #000;
+ }
+
+ .barTtl {
+ 	font-size: 1em;
+ }
+
+.intgrid {
+    fill: none;
+    stroke: black;
+    opacity: .5;
+  }
+
+.axisgrid {
+	fill: none;
+	stroke: black;
+	stroke-width: 2;
+}
+
+.axisLabel {
+	font-size: .7em;
+}
+
+.legend {
+	font-weight: normal;
+}
+    
+div.tooltip {
+  position: absolute;
+  text-align: center;
+  width: 140px;
+  height: 55px;
+  padding: 8px;
+  font-size: .7em;
+  background: white;
+  border: solid 1px #aaa;
+  border-radius: 8px;
+  pointer-events: none;
+  font-family: sans-serif;
+  font-weight: bold;
+  color: #000;
+}
+
+</style>
+
+<script>
+	// ADJUSTING SVGwidth WILL ADJUST BARS AND AXIS TO FIT INSIDE
+ 	var SVGwidth = 650;
+	var SVGheight = 785;
+	
+	var svg = d3.select("body")
+	    .append("svg")
+	    .attr("width", SVGwidth+"px")
+	    .attr("height", SVGheight+"px");
+
+	// set up tooltip as a standalone div in order to put images in
+	var tooltip = d3.select("body").append("div")
+	    .attr("class", "tooltip")
+	    .style("opacity", 0);
+
+	// calculates the previous date by subtracting days
+	function pastDays(date,days){
+		return new Date(
+			date.getFullYear(), 
+	        date.getMonth(), 
+	        date.getDate() - days
+		);
+	};
+
+	// DAYS TO LOOP THROUGH (NEEDS TO MATCH DATA EXACTLY)
+	var loopDay = 6;
+	// WITH OF EACH 15 MIN TIME INCREMENT
+	var timelen = SVGwidth/100;
+	// SET INITIAL WIDTH TO SINGLE TIME INCREMENT
+	var widthHr = timelen;
+
+	// DRAW AXIS GRID AND LINES FIRST TO GET BARS ON TOP OF AXIS
+	// USE LOOPDAY AND TIMELEN TO CALCULATE LENGTH AND HEIGHT OF AXIS
+	// loop all inner axis marks
+	var gridLoop = 5;
+	var gridtimes = ["6:00","12:00","18:00","24:00"]
+
+	for(k=1;k<gridLoop;k++){
+		svg.append("line")
+			  .attr("class","intgrid")
+		      .attr("x1",((24*timelen)*k))
+		      .attr("y1",10)
+		      .attr("x2",((24*timelen)*k))
+		      .attr("y2",(100*(loopDay+1))+60);
+
+		svg.append("foreignObject")
+				.attr("class","axisLabel")
+				.attr("x",((24*timelen)*k)-12)
+				.attr("y",(100*(loopDay+1))+70)
+				.attr("height",13)
+				.attr("width",100)
+				.html(gridtimes[k-1]);
+	};
+
+	// x axis grid
+	svg.append("line")
+		  .attr("class","axisgrid")
+	      .attr("x1",1)
+	      .attr("y1",(100*(loopDay+1))+60)
+	      .attr("x2",(24*timelen)*(k-1))
+	      .attr("y2",(100*(loopDay+1))+60);
+
+	// y axis grid
+	svg.append("line")
+		  .attr("class","axisgrid")
+	      .attr("x1",1)
+	      .attr("y1",10)
+	      .attr("x2",1)
+	      .attr("y2",(100*(loopDay+1))+60);
+
+
+	// TEST DATE FOR CSV -- REPLACE WITH CURRENT DAY WHEN API IS LIVE
+	// REMEMBER MONTH IS 0 BASED AND DAY STARTS WITH 1
+	var currDate = new Date(2017,3,4);
+	// TODO grab FROM API where date is greater than
+	// var currDate = new Date();
+	var lastDate = pastDays(currDate,loopDay);
+
+	// BECAUSE OF ASYNC ITS JUST EASIER TO PUT EVERYTHING UNDER THE d3 API LOAD FUNCTION
+
+	d3.csv("test.csv", function(apiOut){
+
+	for (i=0;i<=loopDay;i++){
+		var apiDay = [];
+		var xPos = 1;
+		var nextStatus;
+		dateGrab = pastDays(currDate,i);
+
+	// TODO defining logic for each day
+
+		svg.append("foreignObject")
+			.attr("class","barTtl")
+			.attr("x",15)
+			.attr("y",(i*100)+40)
+			.attr("height",20)
+			.attr("width",300)
+			.html(dateGrab.getMonth()+1 + "/" + dateGrab.getDate() + "/" + dateGrab.getFullYear());
+
+		var calc_beginTime = apiOut[0].access_time.split('/');
+		var beginTime = calc_beginTime[2].substring(4,10);
+
+			// THE FOLLOWING LOOP PUTS ALL SIMILAR STATUS IN A SINGLE BLOCK THEN DRAWS IT
+			for (j=0;j<apiOut.length;j++){
+
+				if(apiOut[j].day == dateGrab.getDate() && apiOut[j].month == dateGrab.getMonth()+1){
+					apiDay.push(apiOut[j]);
+				};
+			};
+
+			// TO BE USED FOR MISSING ROW OFFSET OF X POSITION
+			var missing_total = 0;
+
+			// LOOP THROUGH EACH AND BREAK FOR STATUS CHANGE OR MISSING ROW
+			for (j=0;j<apiDay.length;j++){
+				
+
+				// TODO FIND IF TIME IS MISSING
+				// LOOK AHEAD TO SEE IF QUARTER IS CORRECT IF NOT COUNT MISSING BOXES 
+				// AND OUTPUT GREY BOXES THEN RUN NORMAL WITH ADDED INCREMENTS
+				// SET INITIAL MISSING BLOCK # TO ZERO
+					var missing = 0
+
+				// FIND CURRENT QUARTER AND HOUR
+					var quarter = Number(apiDay[j].quarter);
+					var hour = Number(apiDay[j].hour);
+				// CALCULATE NEXT QUARTER AND HOUR (IF DOESN'T EXIST ADD 1 TO QUARTER FOR ZERO FILL IN FORMULA)
+					if((j+1)<apiDay.length){
+						var quarter1 = Number(apiDay[j+1].quarter);
+						var hour1 = Number(apiDay[j+1].hour);
+					} else {var quarter1 = Number(apiDay[j].quarter)+1};
+				// CALCULATE DIFFERENCE IN HOUR AND QUARTER
+					hourDiff = Math.abs(hour-hour1);
+					quarterDiff = quarter - quarter1;
+				// FORMULA FOR CALCULATING NUMBER OF MISSING QUARTERS (ZERO BASED)
+					missing = ((4*hourDiff)-quarterDiff)-1;
+
+				// SET NEXTstatus AND NEXTTIME
+				// IF STATEMENT ONLY FOR ERROR ON LAST INCREMENT CAN'T LOOK FORWARD SO LOOK @ .LENGTH
+				if((j+1)<apiDay.length) {
+					nextstatus = apiDay[j+1].status
+					calc_nextTime = apiOut[j+1].access_time.split('/');
+					nextTime = calc_nextTime[2].substring(4,10);
+				} else if(j>93){
+					nextstatus = apiDay[j].status;
+					nextTime = "24:00";
+				} else {
+					nextstatus = apiDay[j].status;
+					calc_nextTime = apiOut[j].access_time.split('/');
+					nextTime = calc_nextTime[2].substring(4,10);
+				};
+
+				// DECISION TO DISPLAY OR GROUP NEXT TIME INCREMENT
+				// HAD TO INCLUDE THE FORMULA BELOW TO OUTPUT WHERE THE DAY ENDS
+				if (apiDay[j].status == nextstatus && (j+1)<apiDay.length && missing==0) {
+					widthHr = widthHr+timelen;
+				} else {
+
+				svg.append("rect")
+					.datum([apiDay[j].status, beginTime, nextTime,i])
+					.attr("x",xPos+1+(timelen*missing_total))
+					.attr("y", (i*100)+60)
+					.attr("height",60)
+					.attr("width",widthHr)
+					.style("fill", function(d){
+						if(apiDay[j].status == 0){
+							return "#009933";
+						} else if(apiDay[j].status == 1) {
+							return "#ffcc00";
+						} else if (apiDay[j].status ==2) {
+							return "#ff6600";
+						} else {
+							return "black";
+						}
+
+					})
+					.on("mouseover", function(d) {
+						d3.select(this)
+							.style("opacity", .7);
+
+						tooltip.transition()
+		                  .duration(200)
+		                  .style("opacity", 1);
+
+		                if(d[0] == 0) {
+		                	tooltip.html(d[1] + ' -- ' + d[2] + '<br> <table><tr><td><img src="ICON_Normal.png" style="width:30px;height:30px;"></td><td> Operating Normally</td></tr></table>');
+		                } else if(d[0] == 1) {
+		                	tooltip.html(d[1] + ' -- ' + d[2] + '<br> <table><tr><td><img src="ICON_Slow.png" style="width:30px;height:30px;"></td><td> Slower than Normal</td></tr></table>');
+		                } else if(d[0] == 2) {
+		                	tooltip.html(d[1] + ' -- ' + d[2] + '<br> <table><tr><td><img src="ICON_Issues.png" style="width:30px;height:30px;"></td><td> Service Issues</td></tr></table>');
+		                } else if(d[0] == 3) {
+		                	tooltip.html(d[1] + ' -- ' + d[2] + '<br> <table><tr><td><img src="ICON_Issues.png" style="width:30px;height:30px;"></td><td> Service Disruption</td></tr></table>');
+		                } else {
+		                	tooltip.html(d[1] + ' -- ' + d[2] + '<br><br> Information not Available');
+		                }
+		                  
+						})
+		                
+					.on("mousemove", function(){
+		                  tooltip
+		                  .style("left", (d3.event.pageX ) + "px")
+		                  .style("top", (d3.event.pageY-72) + "px");
+		                  })
+					.on("mouseout", function() {
+						d3.select(this)
+							.style("opacity", 1);
+
+						tooltip.transition()
+		                  .duration(200)
+		                  .style("opacity", 0);
+						});
+
+				// THIS CALCULATES THE X OFFSET 
+				xPos = (j*timelen)+timelen;
+				// reset the width of the hour INCREMENTs
+				widthHr = timelen;
+				// reset the beginning time INCREMENT to the next time INCREMENT beginning
+				beginTime = nextTime; 
+
+				};
+
+				if(missing > 0){
+					// DRAW MISSING AREA
+					svg.append("rect")
+						.datum([apiDay[j].status, beginTime, nextTime,i])
+						.attr("x",xPos+1)
+						.attr("y", (i*100)+60)
+						.attr("height",60)
+						.attr("width",timelen*missing)
+						.style("fill", "#bcbcbc")
+						.on("mouseover", function(d) {
+							d3.select(this)
+								.style("opacity", .7);
+
+							tooltip.transition()
+			                  .duration(200)
+			                  .style("opacity", 1);
+
+			                tooltip.html(d[1] + ' -- ' + d[2] + '<br> Information Not Available');
+							})
+			                
+						.on("mousemove", function(){
+			                  tooltip
+			                  .style("left", (d3.event.pageX ) + "px")
+			                  .style("top", (d3.event.pageY-72) + "px");
+			                  })
+						.on("mouseout", function() {
+							d3.select(this)
+								.style("opacity", 1);
+
+							tooltip.transition()
+			                  .duration(200)
+			                  .style("opacity", 0);
+							});
+
+				// THIS ADDS THE BLANK REC TO THE X OFFSET 
+				missing_total = missing_total+missing;
+				}
+
+			}
+
+
+		};
+	});
+
+</script>
+
+
